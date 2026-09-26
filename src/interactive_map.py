@@ -45,7 +45,8 @@ def _freeze_element_ids(html: str) -> str:
     return re.sub(r'[0-9a-f]{32}', repl, html)
 
 
-def main(stem=STEM, chunk_sec: int = 20, out_name: str = 'football_2026-09-19_interactive.html') -> Path:
+def main(stem=STEM, chunk_sec: int = 20, out_name: str = None) -> Path:
+    out_name = out_name or ('football_' + str(stem).replace('polar_', '') + '_interactive.html')
     trk, laps, fld, u, w, v_kmh, dt, scale, offs = load_all(stem)
     n = len(trk.tsec)
     hr = np.asarray(trk.hr, dtype=float)
@@ -125,7 +126,7 @@ def main(stem=STEM, chunk_sec: int = 20, out_name: str = 'football_2026-09-19_in
 
     legend = ('<div style="position:fixed;bottom:24px;left:24px;z-index:9999;background:rgba(20,20,20,.86);'
               'color:#fff;padding:12px 14px;border-radius:8px;font:13px/1.6 Microsoft YaHei,sans-serif;min-width:250px">'
-              '<b>2026-09-19 足球课次</b><br>'
+              '<b>' + str(stem).replace('polar_', '') + '</b><br>'
               '时长 ' + fc.hms(trk.tsec[-1] - trk.tsec[0]) + ' | 官方 ' + str(round(trk.official_km, 2)) + ' km<br>'
               '平均心率 ' + str(int(np.nanmean(hr))) + ' bpm<br>'
               '场地 ' + str(round(fld.long_side_m, 1)) + ' x ' + str(round(fld.short_side_m, 1)) + ' m<br>'

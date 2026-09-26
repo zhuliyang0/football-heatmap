@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+
+# 个人数据与产出不进版本库
+data/raw/*.gpx
+data/raw/*.tcx
+data/raw/*.csv
+data/raw/*.json
+output/
+report/
+足球数据/
+
+# 编辑器
+.vscode/
+.idea/

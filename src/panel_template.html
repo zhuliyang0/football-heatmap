@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>运动数据 · 跑动热图</title>
+<style>
+  :root{--bg:#0b1220;--panel:#111c31;--line:#1e2b45;--fg:#f2f6ff;--muted:#93a4c4;--green:#3ddc84;--blue:#4d9dff;--accent:#ff7a45}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.6 "Microsoft YaHei",system-ui,sans-serif}
+  .phone{max-width:470px;margin:0 auto;min-height:100vh;padding:14px 16px 40px}
+  .topbar{display:flex;align-items:center;padding-bottom:12px;border-bottom:1px solid var(--line)}
+  .back{color:var(--green);font-size:20px;margin-right:10px}
+  .title{font-size:19px;font-weight:700;flex:1}
+  .share{color:var(--green);font-size:13px;cursor:pointer}
+  .tabs{display:flex;align-items:center;gap:20px;margin:14px 0 2px;border-bottom:1px solid var(--line)}
+  .tab{padding:6px 2px 10px;color:var(--muted);font-size:15px;cursor:pointer;border-bottom:2px solid transparent}
+  .tab.active{color:var(--blue);font-weight:700;border-bottom-color:var(--blue)}
+  .tune{margin-left:auto;color:var(--green);font-size:12px;padding-bottom:10px;cursor:pointer}
+  .row{display:flex;align-items:center;justify-content:space-between;margin:12px 0 8px}
+  .arrow-wrap{display:flex;align-items:center;gap:10px;font-size:13px}
+  .arrow{position:relative;height:3px;background:#cbd6ea;border-radius:2px}
+  .arrow:after{content:"";position:absolute;left:-9px;top:-6px;border:8px solid transparent;border-right-color:#cbd6ea}
+  .arrow-right:after{left:auto;right:-9px;border-right-color:transparent;border-left-color:#cbd6ea}
+  .link{color:var(--green);font-size:12px;cursor:pointer}
+  .field{position:relative;border-radius:8px;overflow:hidden;margin-bottom:12px}
+  .zones{display:grid;grid-template-columns:1fr 1fr 1fr;height:196px}
+  .zone{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
+  .zone .pct{font-size:34px;font-weight:800;letter-spacing:1px}
+  .zone .nm{font-size:12px;opacity:.94}
+  .zone:not(:last-child){border-right:2px dashed rgba(255,255,255,.85)}
+  .pitch-lines{position:absolute;inset:0;pointer-events:none;opacity:.55}
+  .canvas-box{position:relative;background:#0d2b16;border-radius:8px;overflow:hidden}
+  canvas{display:block;width:100%;height:auto}
+  .legend{position:absolute;left:9px;top:9px;display:grid;grid-template-columns:9px 9px;gap:1px}
+  .legend i{display:block;width:9px;height:10px}
+  .footer{margin-top:14px}
+  .footer .pitch{display:flex;justify-content:space-between;font-size:14px}
+  .hint{color:var(--muted);font-size:11px;margin-top:8px;line-height:1.8}
+  .seg{display:flex;gap:6px;margin:10px 0}
+  .seg button{flex:1;background:var(--panel);color:var(--muted);border:1px solid var(--line);border-radius:7px;padding:6px 4px;font-size:12px;cursor:pointer}
+  .seg button.on{color:var(--fg);border-color:var(--blue);background:#16233c}
+  .stats{display:flex;gap:18px;margin:10px 0 4px}
+  .stat .k{color:var(--muted);font-size:11px}
+  .stat .v{font-size:18px;font-weight:700}
+  .barrow{margin:12px 0}
+  .barrow .lbl{display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px}
+  .bar{height:9px;border-radius:5px;background:#1a2740;overflow:hidden}
+  .bar > i{display:block;height:100%;border-radius:5px}
+  .sprintcard{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:10px 12px;margin-bottom:8px;display:flex;justify-content:space-between;font-size:12px;cursor:pointer}
+  .sprintcard.on{border-color:var(--accent)}
+  .sprintcard b{font-size:14px}
+  .hidden{display:none}
+  .halflabel{margin:6px 0 8px;font-size:13px}
+  .halflabel b{color:#ffd400}
+  .halflabel span{color:#93a4c4;font-size:11px}
+  .tip{position:fixed;pointer-events:none;background:#16233c;border:1px solid var(--line);border-radius:6px;padding:6px 8px;font-size:12px;opacity:0;transition:opacity .12s;z-index:99}
+</style>
+</head>
+<body>
+<div class="phone">
+  <div class="topbar"><span class="back">←</span><span class="title">运动数据</span><span class="share">分享</span></div>
+  <div class="tabs">
+    <div class="tab active" data-tab="heat">跑动热图</div>
+    <div class="tab" data-tab="sprint">冲刺路径</div>
+    <div class="tab" data-tab="run">跑动数据</div>
+    <div class="tune">微调球场</div>
+  </div>
+  <div id="page-heat">
+    <div class="row"><div class="arrow-wrap">进攻方向：<div class="arrow arrow-right" style="width:150px"></div></div><div class="link">修改</div></div>
+    <div class="field"><div class="zones" id="zones"></div></div>
+    <div class="seg" id="segHeat">
+      <button data-view="all" class="on">全场</button>
+      <button data-view="own">左半场</button>
+      <button data-view="opp">右半场</button>
+      <button data-view="first">上半段</button>
+      <button data-view="second">下半段</button>
+    </div>
+    <div id="halfLabel" class="halflabel"></div>
+    <div class="canvas-box"><canvas id="heat" width="530" height="335"></canvas><div class="legend" id="legend"></div></div>
+    <div class="footer">
+      <div class="pitch"><span id="pitchname"></span><span class="link">修改</span></div>
+      <div class="hint" id="heathint"></div>
+    </div>
+  </div>
+  <div id="page-sprint" class="hidden">
+    <div class="row"><div class="arrow-wrap">阈值 15 公里/时</div><div class="link">修改</div></div>
+    <div class="stats" id="sprintStats"></div>
+    <div class="canvas-box" style="background:#173d21"><canvas id="sprintField" width="530" height="335"></canvas></div>
+    <div style="margin-top:12px" id="sprintList"></div>
+  </div>
+  <div id="page-run" class="hidden">
+    <div class="stats" id="runStats"></div>
+    <div style="margin:16px 0 6px;font-size:16px;font-weight:700">距离</div>
+    <div id="distBars"></div>
+    <div style="margin:18px 0 6px;font-size:16px;font-weight:700">时间</div>
+    <div id="timeBars"></div>
+    <div style="margin:18px 0 6px;font-size:16px;font-weight:700">速度曲线</div>
+    <div class="hint">每 2 分钟内的最高速度</div>
+    <div class="canvas-box"><canvas id="curve" width="530" height="155"></canvas></div>
+  </div>
+</div>
+<div class="tip" id="tip"></div>
+<script id="payload" type="application/json">__DATA__</script>
+<script>
+const D = JSON.parse(document.getElementById("payload").textContent);
+const W = D.meta.W, H = D.meta.H;
+function turbo(t){
+  const S=[[0.00,[11,13,46]],[0.12,[26,41,107]],[0.26,[51,89,133]],[0.40,[56,140,107]],
+           [0.52,[140,184,51]],[0.62,[235,209,31]],[0.74,[252,158,26]],[0.86,[252,87,15]],[1.00,[199,5,13]]];
+  t=Math.max(0,Math.min(1,t));
+  for(let i=0;i<S.length-1;i++){const t0=S[i][0],c0=S[i][1],t1=S[i+1][0],c1=S[i+1][1];
+    if(t<=t1){const k=(t-t0)/(t1-t0);return [0,1,2].map(function(j){return Math.round(c0[j]+(c1[j]-c0[j])*k);});}}
+  return S[S.length-1][1];
+}
+function cx(v){return "rgb("+v[0]+","+v[1]+","+v[2]+")";}
+function drawPitch(ctx,w,h,color,lw){
+  ctx.save();ctx.strokeStyle=color;ctx.lineWidth=lw;
+  ctx.strokeRect(0.5,0.5,w-1,h-1);
+  ctx.beginPath();ctx.moveTo(w/2,0);ctx.lineTo(w/2,h);ctx.stroke();
+  ctx.beginPath();ctx.arc(w/2,h/2,w*0.0873,0,Math.PI*2);ctx.stroke();
+  ctx.beginPath();ctx.arc(w/2,h/2,2,0,Math.PI*2);ctx.fillStyle=color;ctx.fill();
+  const boxW=w*0.157, boxH=h*0.59, sixW=w*0.052, sixH=h*0.27;
+  ctx.strokeRect(0,h/2-boxH/2,boxW,boxH);ctx.strokeRect(w-boxW,h/2-boxH/2,boxW,boxH);
+  ctx.strokeRect(0,h/2-sixH/2,sixW,sixH);ctx.strokeRect(w-sixW,h/2-sixH/2,sixW,sixH);
+  ctx.strokeRect(w*0.062,h/2-h*0.027,w*0.035,h*0.054);
+  ctx.strokeRect(w-w*0.097,h/2-h*0.027,w*0.035,h*0.054);
+  ctx.restore();
+}
+function drawHeat(view){
+  const cv=document.getElementById("heat"), ctx=cv.getContext("2d");
+  const nx=D.grid.nx, ny=D.grid.ny, w=cv.width, h=cv.height;
+  ctx.clearRect(0,0,w,h);ctx.fillStyle="#0d2b16";ctx.fillRect(0,0,w,h);
+  ctx.imageSmoothingEnabled = true;
+  const data=D.grid[view]||D.grid.all;
+  const tmp=document.createElement("canvas");tmp.width=nx;tmp.height=ny;
+  const tctx=tmp.getContext("2d");
+  const img=tctx.createImageData(nx,ny);
+  for(let j=0;j<ny;j++){for(let i=0;i<nx;i++){
+    const v=data[i*ny+j];
+    const c=turbo(v);
+    const p=(((ny-1-j)*nx)+i)*4;
+    img.data[p]=c[0];img.data[p+1]=c[1];img.data[p+2]=c[2];
+    img.data[p+3]=v<=0.015?0:235;
+  }}
+  tctx.putImageData(img,0,0);
+  ctx.imageSmoothingEnabled=true;
+  ctx.drawImage(tmp,0,0,nx,ny,0,0,w,h);
+  drawPitch(ctx,w,h,"rgba(255,255,255,0.95)",2);
+}
+function drawSprints(active){
+  const cv=document.getElementById("sprintField"), ctx=cv.getContext("2d");
+  const w=cv.width,h=cv.height;
+  ctx.clearRect(0,0,w,h);ctx.fillStyle="#173d21";ctx.fillRect(0,0,w,h);
+  const sx=function(x){return x/W*w;}, sy=function(y){return h-y/H*h;};
+  ctx.fillStyle="rgba(150,180,210,0.22)";
+  D.track.forEach(function(p){ctx.fillRect(sx(p[0])-0.7, sy(p[1])-0.7, 1.8, 1.8);});
+  drawPitch(ctx,w,h,"#cfe0d6",1.4);
+  D.sprints.forEach(function(s,i){
+    const on=(active==null)||(active===i);
+    ctx.globalAlpha=on?1:0.16;
+    const col=(i===0?"#ffd400":"#ff7a45");
+    ctx.strokeStyle=col;ctx.lineWidth=on?6:4;ctx.lineCap="round";
+    ctx.beginPath();
+    s.pts.forEach(function(p,k){k?ctx.lineTo(sx(p[0]),sy(p[1])):ctx.moveTo(sx(p[0]),sy(p[1]));});
+    ctx.stroke();
+    const st=s.pts[0], en=s.pts[s.pts.length-1];
+    const ang=Math.atan2(sy(en[1])-sy(st[1]), sx(en[0])-sx(st[0]));
+    ctx.save();ctx.translate(sx(en[0]),sy(en[1]));ctx.rotate(ang);ctx.fillStyle=col;
+    ctx.beginPath();ctx.moveTo(0,0);ctx.lineTo(-17,7);ctx.lineTo(-17,-7);ctx.closePath();ctx.fill();ctx.restore();
+    ctx.beginPath();ctx.arc(sx(st[0]),sy(st[1]),11,0,Math.PI*2);ctx.fillStyle="#0b1220";ctx.fill();
+    ctx.strokeStyle=col;ctx.lineWidth=2;ctx.stroke();
+    ctx.fillStyle="#fff";ctx.font="bold 13px Microsoft YaHei";ctx.textAlign="center";ctx.textBaseline="middle";
+    ctx.fillText(String(i+1), sx(st[0]), sy(st[1]));
+    ctx.globalAlpha=1;
+  });
+}
+function drawCurve(){
+  const cv=document.getElementById("curve"), ctx=cv.getContext("2d");
+  const w=cv.width,h=cv.height,mx=120,my=32;
+  ctx.clearRect(0,0,w,h);ctx.fillStyle="#0d1524";ctx.fillRect(0,0,w,h);
+  ctx.strokeStyle="#22304a";ctx.lineWidth=1;
+  for(let i=0;i<=6;i++){const y=h-h*i/6;ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke();}
+  const sx=function(t){return t/mx*w;}, sy=function(v){return h-v/my*h;};
+  ctx.beginPath();ctx.moveTo(0,h);
+  D.curve.forEach(function(p){ctx.lineTo(sx(p[0]),sy(p[1]));});
+  ctx.lineTo(sx(D.curve[D.curve.length-1][0]),h);ctx.closePath();
+  ctx.fillStyle="rgba(57,215,255,0.30)";ctx.fill();
+  ctx.beginPath();
+  D.curve.forEach(function(p,k){k?ctx.lineTo(sx(p[0]),sy(p[1])):ctx.moveTo(sx(p[0]),sy(p[1]));});
+  ctx.strokeStyle="#39d7ff";ctx.lineWidth=2;ctx.stroke();
+  ctx.fillStyle="#93a4c4";ctx.font="11px Microsoft YaHei";ctx.textAlign="center";ctx.textBaseline="alphabetic";
+  [0,15,30,45,60,75,90,105].forEach(function(t){
+    if(t>mx) return;
+    ctx.fillText(String(t), Math.min(w-8,Math.max(10,sx(t))), h-8);
+  });
+}
+function initZones(){
+  const el=document.getElementById("zones");
+  const shades=["#7a3b22","#6f4020","#6b4a1c"];
+  D.zones.forEach(function(z,i){
+    const d=document.createElement("div");
+    d.className="zone";d.style.background=shades[i];
+    d.innerHTML="<div class=\"pct\">"+z.pct+"%</div><div class=\"nm\">"+z.name+"</div>";
+    el.appendChild(d);
+  });
+  const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");
+  svg.setAttribute("class","pitch-lines");
+  svg.setAttribute("viewBox","0 0 1060 670");
+  svg.setAttribute("preserveAspectRatio","none");
+  function ln(x1,y1,x2,y2){return "<line x1=\""+x1+"\" y1=\""+y1+"\" x2=\""+x2+"\" y2=\""+y2+"\" stroke=\"white\" stroke-width=\"2\"/>";}
+  svg.innerHTML = ln(530,0,530,670)
+    + "<circle cx=\"530\" cy=\"335\" r=\"92\" fill=\"none\" stroke=\"white\" stroke-width=\"2\"/>"
+    + "<rect x=\"0\" y=\"137\" width=\"166\" height=\"396\" fill=\"none\" stroke=\"white\" stroke-width=\"2\"/>"
+    + "<rect x=\"894\" y=\"137\" width=\"166\" height=\"396\" fill=\"none\" stroke=\"white\" stroke-width=\"2\"/>"
+    + "<rect x=\"0\" y=\"245\" width=\"55\" height=\"180\" fill=\"none\" stroke=\"white\" stroke-width=\"2\"/>"
+    + "<rect x=\"1005\" y=\"245\" width=\"55\" height=\"180\" fill=\"none\" stroke=\"white\" stroke-width=\"2\"/>";
+  document.querySelector("#page-heat .field").appendChild(svg);
+  const lg=document.getElementById("legend");
+  for(let r=7;r>=0;r--){
+    const t=(r+0.5)/8;
+    lg.innerHTML += "<i style=\"background:"+cx(turbo(t*0.55))+"\"></i><i style=\"background:"+cx(turbo(t))+"\"></i>";
+  }
+}
+function initSprint(){
+  const avgPeak=(D.sprints.reduce(function(s,e){return s+e.peak;},0)/D.sprints.length).toFixed(1);
+  const avgDist=(D.sprints.reduce(function(s,e){return s+e.dist;},0)/D.sprints.length).toFixed(0);
+  document.getElementById("sprintStats").innerHTML=
+    "<div class=\"stat\"><div class=\"k\">平均峰值</div><div class=\"v\">"+avgPeak+" 公里/时</div></div>"
+    + "<div class=\"stat\"><div class=\"k\">平均距离</div><div class=\"v\">"+avgDist+" 米</div></div>"
+    + "<div class=\"stat\"><div class=\"k\">冲刺</div><div class=\"v\" style=\"color:#ff7a45\">"+D.sprints.length+" 次</div></div>";
+  const list=document.getElementById("sprintList");
+  D.sprints.forEach(function(s,i){
+    const d=document.createElement("div");
+    d.className="sprintcard"+(i===0?" on":"");
+    d.innerHTML="<div><b>#"+ (i+1) +"</b> "+s.t+"</div><div>"+s.dist+" m · "+s.dur+" s · 峰值 "+s.peak+" km/h</div>";
+    d.onmouseenter=function(){drawSprints(i);};
+    d.onmouseleave=function(){drawSprints(null);};
+    list.appendChild(d);
+  });
+}
+function initRun(){
+  const m=D.meta;
+  document.getElementById("runStats").innerHTML=
+    "<div class=\"stat\"><div class=\"k\">平均速度（全程）</div><div class=\"v\">"+(m.official_km/(m.total_min/60)).toFixed(1)+" 公里/时</div></div>"
+    + "<div class=\"stat\"><div class=\"k\">最高速度</div><div class=\"v\">"+m.max_dev_kmh+" 公里/时</div></div>";
+  const maxD=Math.max.apply(null,D.bands.map(function(b){return b.dist;}));
+  const maxT=Math.max.apply(null,D.bands.map(function(b){return b.min;}));
+  document.getElementById("distBars").innerHTML=D.bands.map(function(b){
+    return "<div class=\"barrow\"><div class=\"lbl\"><span>"+b.name+" <span style=\"color:#93a4c4\">（"+b.desc+"）</span></span><b>"+b.dist.toFixed(2)+" km</b></div>"
+      + "<div class=\"bar\"><i style=\"width:"+(b.dist/maxD*100).toFixed(1)+"%;background:"+b.color+"\"></i></div></div>";
+  }).join("");
+  document.getElementById("timeBars").innerHTML=D.bands.map(function(b){
+    return "<div class=\"barrow\"><div class=\"lbl\"><span>"+b.name+" <span style=\"color:#93a4c4\">（"+b.desc+"）</span></span><b>"+b.min+" min</b></div>"
+      + "<div class=\"bar\"><i style=\"width:"+(b.min/maxT*100).toFixed(1)+"%;background:"+b.color+"\"></i></div></div>";
+  }).join("") + "<div class=\"hint\">运动时间合计 "+m.moving_min+" 分钟（速度 ≥ 3 公里/时）· 会话时长 "+m.duration+"</div>";
+  drawCurve();
+}
+function showHalfLabel(view){
+  const el=document.getElementById("halfLabel");
+  const H=(D.half_labels||[]);
+  if(!H.length){ el.innerHTML=""; return; }
+  function tag(i){ const s=H[i]; return s ? "<b>"+s.label+"</b> <span>("+s.why.join(" · ")+")</span>" : ""; }
+  if(view==="first") el.innerHTML="上半场位置画像："+tag(0);
+  else if(view==="second") el.innerHTML="下半场位置画像："+tag(1);
+  else el.innerHTML="位置画像 · 上半场："+tag(0)+"<br>位置画像 · 下半场："+tag(1);
+}
+function boot(){
+  document.getElementById("pitchname").textContent="球场："+D.meta.pitch;
+  document.getElementById("heathint").innerHTML=
+    "三分区按停留时间计算（已剔除场外 " + D.meta.kde.dropped_min + " 分钟）<br>"
+    + "朝向：图左=自家球门（南门，x=0），图右=进攻球门（北门，x="+D.meta.W+" m）；向右为进攻方向；纵向 y 0-"+D.meta.H+" m<br>"
+    + "热力层：先裁掉场地外的走动与漂移，再做高斯核密度估计（核宽 "+D.meta.kde.sigma_m+" m，网格 "+D.meta.kde.cell_m+" m），数值为停留时间密度<br>"
+  initZones(); drawHeat("all"); showHalfLabel("all"); initSprint(); drawSprints(null); initRun();
+  document.querySelectorAll("#segHeat button").forEach(function(b){
+    b.onclick=function(){
+      document.querySelectorAll("#segHeat button").forEach(function(x){x.classList.remove("on");});
+      b.classList.add("on"); drawHeat(b.dataset.view); showHalfLabel(b.dataset.view);
+    };
+  });
+  document.querySelectorAll(".tab").forEach(function(t){
+    t.onclick=function(){
+      document.querySelectorAll(".tab").forEach(function(x){x.classList.remove("active");});
+      t.classList.add("active");
+      ["heat","sprint","run"].forEach(function(k){
+        document.getElementById("page-"+k).classList.toggle("hidden", k!==t.dataset.tab);
+      });
+      if(t.dataset.tab==="sprint") drawSprints(null);
+      if(t.dataset.tab==="run") drawCurve();
+    };
+  });
+  const heat=document.getElementById("heat");
+  heat.onmousemove=function(e){
+    const r=heat.getBoundingClientRect();
+    const fx=(e.clientX-r.left)/r.width, fy=(e.clientY-r.top)/r.height;
+    const i=Math.min(D.grid.nx-1,Math.floor(fx*D.grid.nx));
+    const j=Math.min(D.grid.ny-1,Math.floor((1-fy)*D.grid.ny));
+    const v=D.grid.all[i*D.grid.ny+j];
+    const tip=document.getElementById("tip");
+    tip.style.opacity=1;tip.style.left=(e.clientX+12)+"px";tip.style.top=(e.clientY+12)+"px";
+    tip.textContent="x "+(fx*D.meta.W).toFixed(1)+" m   y "+(fy*D.meta.H).toFixed(1)+" m   停留强度 "+v.toFixed(2);
+  };
+  heat.onmouseleave=function(){document.getElementById("tip").style.opacity=0;};
+}
+boot();
+</script>
+</body>
+</html>
